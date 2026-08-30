@@ -1,0 +1,97 @@
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+export enum ProposalState {
+  ACTIVE,
+  CLOSED
+}
+
+export ledger proposalState: ProposalState;
+
+export ledger proposal: Maybe<Opaque<"string">>;
+
+export ledger yesVotes: Counter;
+
+export ledger noVotes: Counter;
+
+export ledger sequence: Counter;
+
+export ledger owner: Bytes<32>;
+
+constructor() {
+  proposalState = ProposalState.CLOSED;
+  proposal = none<Opaque<"string">>();
+  sequence.increment(1);
+}
+
+witness localSecretKey(): Bytes<32>;
+
+export circuit createProposal(
+  proposalText: Opaque<"string">
+): [] {
+  assert(
+    proposalState == ProposalState.CLOSED,
+    "A proposal is already active"
+  );
+
+  proposal = disclose(
+    some<Opaque<"string">>(proposalText)
+  );
+
+  owner = disclose(
+    publicKey(
+      localSecretKey(),
+      sequence as Field as Bytes<32>
+    )
+  );
+
+  proposalState = ProposalState.ACTIVE;
+}
+
+export circuit voteYes(): [] {
+  assert(
+    proposalState == ProposalState.ACTIVE,
+    "There is no active proposal"
+  );
+
+  yesVotes.increment(1);
+}
+
+export circuit voteNo(): [] {
+  assert(
+    proposalState == ProposalState.ACTIVE,
+    "There is no active proposal"
+  );
+
+  noVotes.increment(1);
+}
+
+export circuit closeProposal(): [] {
+  assert(
+    proposalState == ProposalState.ACTIVE,
+    "There is no active proposal"
+  );
+
+  assert(
+    owner ==
+      publicKey(
+        localSecretKey(),
+        sequence as Field as Bytes<32>
+      ),
+    "Only the proposal creator can close the proposal"
+  );
+
+  proposalState = ProposalState.CLOSED;
+  proposal = none<Opaque<"string">>();
+  sequence.increment(1);
+}
+
+export circuit publicKey(
+  sk: Bytes<32>,
+  sequence: Bytes<32>
+): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>(
+    [pad(32, "bboard:pk:"), sequence, sk]
+  );
+}
